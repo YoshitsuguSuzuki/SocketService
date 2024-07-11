@@ -48,9 +48,14 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
+        mTcpSendSocketNum = 0;
+        mTcpRcvSocketNum = 0;
+        break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
+        break;
     case DLL_PROCESS_DETACH:
+        TcpClearParameter();
         break;
     }
     return TRUE;
@@ -73,25 +78,31 @@ void TcpInterface_TcpInitDllFunction(int sendNum, int rcvNum)
 	TcpClearParameter();
 
 	// Create resource for TCP Send Socket
-	mTcpSendSocketNum = sendNum;
-	if(0 < mTcpSendSocketNum)
+	if(0 < sendNum)
 	{
+		mTcpSendSocketNum = sendNum;
+											/* Threadﾊﾝﾄﾞﾙ 確保											*/
 		mTcpSendThread = (HANDLE *)malloc((mTcpSendSocketNum * sizeof(HANDLE)));
 		memset(mTcpSendThread, 0, (mTcpSendSocketNum * sizeof(HANDLE)));
+											/* 送信用ﾃﾞｰﾀ 確保											*/
 		mTcpSendInformation = (stTcpInformation_tag *)malloc((mTcpSendSocketNum * sizeof(stTcpInformation_tag)));
 		memset(mTcpSendInformation, 0, (mTcpSendSocketNum * sizeof(stTcpInformation_tag)));
+											/* Threadﾊﾝﾄﾞﾙｲﾍﾞﾝﾄ 確保									*/
 		mTcpSendThreadEvent = (HANDLE *)malloc((mTcpSendSocketNum * (eTcpSendServiceEvent_Max * sizeof(HANDLE))));
 		memset(mTcpSendThreadEvent, 0, (mTcpSendSocketNum * (eTcpSendServiceEvent_Max * sizeof(HANDLE))));
 	}
 
 	// Create resource for TCP Rcv Socket
-	mTcpRcvSocketNum = rcvNum;
-	if(0 < mTcpRcvSocketNum)
+	if(0 < rcvNum)
 	{
+		mTcpRcvSocketNum = rcvNum;
+											/* Threadﾊﾝﾄﾞﾙ 確保											*/
 		mTcpRcvThread = (HANDLE *)malloc((mTcpRcvSocketNum * sizeof(HANDLE)));
 		memset(mTcpRcvThread, 0, (mTcpRcvSocketNum * sizeof(HANDLE)));
+											/* 受信用ﾃﾞｰﾀ 確保											*/
 		mTcpRcvInformation = (stTcpInformation_tag *)malloc((mTcpRcvSocketNum * sizeof(stTcpInformation_tag)));
 		memset(mTcpRcvInformation, 0, (mTcpRcvSocketNum * sizeof(stTcpInformation_tag)));
+											/* Threadﾊﾝﾄﾞﾙｲﾍﾞﾝﾄ 確保									*/
 		mTcpRcvThreadEvent = (HANDLE *)malloc((mTcpRcvSocketNum * (eTcpRcvServiceEvent_Max * sizeof(HANDLE))));
 		memset(mTcpRcvThreadEvent, 0, (mTcpRcvSocketNum * (eTcpRcvServiceEvent_Max * sizeof(HANDLE))));
 	}
@@ -113,11 +124,14 @@ void TcpInterface_TcpSetSendParameter(int socketNo, TcpSendParameter *parameter)
 {
 	if(mTcpSendSocketNum > socketNo)
 	{
-		memset((mTcpSendInformation + socketNo), 0, sizeof(stTcpInformation_tag));
-		memcpy((mTcpSendInformation + socketNo)->ipAddr, parameter->ipAddr, sizeof(parameter->ipAddr));
-		(mTcpSendInformation + socketNo)->port = parameter->port;
-		(mTcpSendInformation + socketNo)->dataQueueSize = parameter->dataQueueSize;
-		(mTcpSendInformation + socketNo)->dataQueueLen = parameter->dataQueueLen;
+		if(nullptr != (mTcpSendInformation + socketNo))
+		{
+			memset((mTcpSendInformation + socketNo), 0, sizeof(stTcpInformation_tag));
+			memcpy((mTcpSendInformation + socketNo)->ipAddr, parameter->ipAddr, sizeof(parameter->ipAddr));
+			(mTcpSendInformation + socketNo)->port = parameter->port;
+			(mTcpSendInformation + socketNo)->dataQueueSize = parameter->dataQueueSize;
+			(mTcpSendInformation + socketNo)->dataQueueLen = parameter->dataQueueLen;
+		}
 	}
 }
 
@@ -137,10 +151,13 @@ void TcpInterface_TcpSetRcvParameter(int socketNo, TcpRcvParameter *parameter)
 {
 	if(mTcpRcvSocketNum > socketNo)
 	{
-		memset((mTcpRcvInformation + socketNo), 0, sizeof(stTcpInformation_tag));
-		(mTcpRcvInformation + socketNo)->port = parameter->port;
-		(mTcpRcvInformation + socketNo)->dataQueueSize = parameter->dataQueueSize;
-		(mTcpRcvInformation + socketNo)->dataQueueLen = parameter->dataQueueLen;
+		if(nullptr != (mTcpRcvInformation + socketNo))
+		{
+			memset((mTcpRcvInformation + socketNo), 0, sizeof(stTcpInformation_tag));
+			(mTcpRcvInformation + socketNo)->port = parameter->port;
+			(mTcpRcvInformation + socketNo)->dataQueueSize = parameter->dataQueueSize;
+			(mTcpRcvInformation + socketNo)->dataQueueLen = parameter->dataQueueLen;
+		}
 	}
 }
 
@@ -164,6 +181,7 @@ void TcpInterface_InitTcpSendService(int socketNo)
 		if(nullptr == *(mTcpSendThread + socketNo))
 		{
 			(mTcpSendInformation + socketNo)->socketNo = socketNo;
+											/* 送信用ﾃﾞｰﾀ確保済みの場合は解放							*/
 			if(nullptr != ((mTcpSendInformation + socketNo)->data))
 			{
 				free((mTcpSendInformation + socketNo)->data);
@@ -171,7 +189,13 @@ void TcpInterface_InitTcpSendService(int socketNo)
 			(mTcpSendInformation + socketNo)->data = (char *)malloc(((mTcpSendInformation + socketNo)->dataQueueSize * ((mTcpSendInformation + socketNo)->dataQueueLen * sizeof(char))));
 			(mTcpSendInformation + socketNo)->wp = 0;
 			(mTcpSendInformation + socketNo)->rp = 0;
+											/* Threadﾊﾝﾄﾞﾙｲﾍﾞﾝﾄ 生成									*/
 			memset((mTcpSendThreadEvent + (socketNo * eTcpSendServiceEvent_Max)), 0, (eTcpSendServiceEvent_Max * sizeof(HANDLE)));
+			for(int i = 0; i < eTcpSendServiceEvent_Max; i++)
+			{
+				*((mTcpSendThreadEvent + (socketNo * eTcpSendServiceEvent_Max)) + i) = CreateEvent(NULL, FALSE, FALSE, NULL);
+			}
+
 			*(mTcpSendThread + socketNo) = CreateThread(nullptr, 0, TcpSendThreadFunc, (mTcpSendInformation + socketNo), 0, &threadId);
 		}
 	}
@@ -197,6 +221,7 @@ void TcpInterface_InitTcpRcvService(int socketNo)
 		if(nullptr == *(mTcpRcvThread + socketNo))
 		{
 			(mTcpRcvInformation + socketNo)->socketNo = socketNo;
+											/* 受信用ﾃﾞｰﾀ確保済みの場合は解放							*/
 			if(nullptr != (mTcpRcvInformation + socketNo)->data)
 			{
 				free((mTcpRcvInformation + socketNo)->data);
@@ -204,7 +229,12 @@ void TcpInterface_InitTcpRcvService(int socketNo)
 			(mTcpRcvInformation + socketNo)->data = (char *)malloc(((mTcpRcvInformation + socketNo)->dataQueueSize * (mTcpRcvInformation + socketNo)->dataQueueLen) * sizeof(char));
 			(mTcpRcvInformation + socketNo)->wp = 0;
 			(mTcpRcvInformation + socketNo)->rp = 0;
+											/* Threadﾊﾝﾄﾞﾙｲﾍﾞﾝﾄ 生成									*/
 			memset((mTcpRcvThreadEvent + (socketNo * eTcpRcvServiceEvent_Max)), 0, (eTcpRcvServiceEvent_Max * sizeof(HANDLE)));
+			for(int i = 0; i < eTcpRcvServiceEvent_Max; i++)
+			{
+				*((mTcpRcvThreadEvent + (socketNo * eTcpRcvServiceEvent_Max)) + i) = CreateEvent(NULL, FALSE, FALSE, NULL);
+			}
 			*(mTcpRcvThread + socketNo) = CreateThread(nullptr, 0, TcpRcvThreadFunc, (mTcpRcvInformation + socketNo), 0, &threadId);
 		}
 	}
@@ -229,8 +259,10 @@ void TcpInterface_PushTcpSendData(int socketNo, char *data, int len)
 	{
 		if(nullptr != (mTcpSendInformation + socketNo))
 		{
+											/* 送信ﾃﾞｰﾀ 格納											*/
 			memset(((mTcpSendInformation + socketNo)->data + ((mTcpSendInformation + socketNo)->wp * (mTcpSendInformation + socketNo)->dataQueueLen)), 0, (mTcpSendInformation + socketNo)->dataQueueLen);
 			memcpy(((mTcpSendInformation + socketNo)->data + ((mTcpSendInformation + socketNo)->wp * (mTcpSendInformation + socketNo)->dataQueueLen)), data, len);
+											/* ﾗｲﾄﾎﾟｲﾝﾀ 更新											*/
 			(mTcpSendInformation + socketNo)->wp = (((mTcpSendInformation + socketNo)->wp + 1) % (mTcpSendInformation + socketNo)->dataQueueSize);
 			if((mTcpSendInformation + socketNo)->wp == (mTcpSendInformation + socketNo)->rp)
 			{
@@ -314,6 +346,7 @@ BOOL TcpInterface_PullTcpRcvData(int socketNo, char *data)
 		{
 			if((mTcpRcvInformation + socketNo)->wp != (mTcpRcvInformation + socketNo)->rp)
 			{
+											/* 受信ﾃﾞｰﾀ 取得											*/
 				memcpy(data, ((mTcpRcvInformation + socketNo)->data + ((mTcpRcvInformation + socketNo)->rp * (mTcpRcvInformation + socketNo)->dataQueueLen)), (mTcpRcvInformation + socketNo)->dataQueueLen);
 				(mTcpRcvInformation + socketNo)->rp = (((mTcpRcvInformation + socketNo)->rp + 1) % (mTcpRcvInformation + socketNo)->dataQueueSize);
 				isRcvData = TRUE;
@@ -350,11 +383,6 @@ static DWORD WINAPI TcpSendThreadFunc(LPVOID arg)
 	if(0 != WSAStartup(MAKEWORD(2,2), &wsaData))
 	{
 		return 0;
-	}
-
-	for(int i = 0; i < eTcpSendServiceEvent_Max; i++)
-	{
-		*(event + i) = CreateEvent(NULL, FALSE, FALSE, NULL);
 	}
 
 	while(1)
@@ -436,11 +464,6 @@ static DWORD WINAPI TcpRcvThreadFunc(LPVOID arg)
 	if(0 != WSAStartup(MAKEWORD(2,2), &wsaData))
 	{
 		return 0;
-	}
-
-	for(int i = 0; i < eTcpRcvServiceEvent_Max; i++)
-	{
-		*(event + i) = CreateEvent(NULL, FALSE, FALSE, NULL);
 	}
 
 	while(1)

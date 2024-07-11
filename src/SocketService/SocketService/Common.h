@@ -20,7 +20,8 @@
 
 #if defined(_TCP)
 #define TCP_IPADDR "127.0.0.1"
-#define TCP_PORT 65520
+#define TCP_PORT1 65520
+#define TCP_PORT2 65521
 #define TCP_SEND_QUEUE_SIZE 16
 #define TCP_SEND_QUEUE_LEN 128
 #define TCP_RCV_QUEUE_SIZE 16
