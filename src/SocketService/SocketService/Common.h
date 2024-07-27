@@ -28,5 +28,7 @@
 #define TCP_RCV_QUEUE_LEN 128
 #endif	/* defined(_TCP) */
 
+#define _TEST_ 1
+
 
 #endif //COMMON_H
